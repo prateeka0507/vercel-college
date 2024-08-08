@@ -13,8 +13,8 @@ from difflib import SequenceMatcher
 app = Flask(__name__)
 
 # Access your API keys (set these in Vercel environment variables)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
 INDEX_NAME = "college-buddy"
 
 
