@@ -1,139 +1,20 @@
 import os
-from flask import Flask, render_template_string, request, jsonify
+import time
+from flask import Flask, render_template_string, request, jsonify, current_app
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 import tiktoken
 from tiktoken import get_encoding
-import uuid
-import time
-import random
-import sqlite3
 from difflib import SequenceMatcher
 
 app = Flask(__name__)
 
-# Access your API keys (set these in Vercel environment variables)
+# Access your API keys from environment variables
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
 INDEX_NAME = "college-buddy"
 
-
-# Initialize OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Initialize Pinecone
-pc = Pinecone(api_key=PINECONE_API_KEY)
-
-# Create or connect to the Pinecone index
-if INDEX_NAME not in pc.list_indexes().names():
-    pc.create_index(
-        name=INDEX_NAME,
-        dimension=1536,
-        metric='cosine',
-        spec=ServerlessSpec(cloud='aws', region='us-east-1')
-    )
-index = pc.Index(INDEX_NAME)
-
-# Database functions
-def get_database_connection():
-    db_path = os.path.join(os.getcwd(), 'college_buddy.db')
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    return conn
-
-def init_db(conn):
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS documents
-                 (id INTEGER PRIMARY KEY, title TEXT, tags TEXT, links TEXT)''')
-    conn.commit()
-
-def load_initial_data():
-    conn = get_database_connection()
-    data = [
-        (1, "TEXAS TECH", "Universities, Texas Tech University, College Life, Student Wellness, Financial Tips for Students, Campus Activities, Study Strategies", "https://www.ttu.edu/"),
-        (2, "ADVISING", "Advising, Campus Advising, Registration, Financial Management, Raider Success Hub, Degree Works, Visual Schedule Builder", "https://www.depts.ttu.edu/advising/current-students/advising/"),
-        (3, "COURSE PREFIXES", "courses, Undergraduate Degrees, Academic Programs, Degree Concentrations, College Majors, University Programs, Bachelor's Degrees", "https://www.depts.ttu.edu/advising/current-students/course-prefixes/"),
-        (4, "NEW STUDENT", "New Student Information, University Advising, Red Raider Orientation, TTU New Students, Academic Advising, Career Planning, Student Success", "https://www.depts.ttu.edu/advising/current-students/new-student-information/"),
-        (5, "DECLARE YOUR MAJOR", "Declaring your major, Major Declaration, Academic Transfer Form, College Requirements, GPA Requirements, Advisor Appointment, Major Transfer Process", "https://www.depts.ttu.edu/advising/current-students/declare-your-major/"),
-        (6, "Texas Tech University Students Handbook-chunk 1", "Students Handbook, Student Conduct, Hearing Panel, Disciplinary Procedures, University Policy, Academic Integrity, Student Rights", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (7, "Texas Tech University Students Handbook-chunk 2", "Students Handbook, Texas Tech University, Student Conduct Code, University Policies, Academic Integrity, Misconduct Reporting, FERPA Privacy", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (8, "Texas Tech University Students Handbook-chunk 3", "Students Handbook, Student Conduct, University Policies, Code of Conduct, Disciplinary Procedures, Student Rights, University Regulations", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (9, "Texas Tech University Students Handbook-chunk 4", "Students Handbook, Student Conduct Procedures, Conduct Investigations, Disciplinary Actions, University Adjudication, Student Rights and Responsibilities, Conduct Hearings", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (10, "Texas Tech University Students Handbook-chunk 5", "Students Handbook, Disciplinary Sanctions, Conduct Appeals, Student Conduct Records, Sexual Misconduct Policy, Title IX Procedures, University Sanctions", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (11, "Texas Tech University Students Handbook-chunk 6", "Students Handbook, Non-Title IX Sexual Misconduct, Interpersonal Violence, Sexual Harassment, Sexual Assault Reporting, Supportive Measures, University Sexual Misconduct Policy", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (12, "Texas Tech University Students Handbook-chunk 7", "Students Handbook, Amnesty Provisions, Sexual Misconduct Reporting, Incident Response, Formal Complaint Process, Title IX Coordinator, Supportive Measures", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (13, "Texas Tech University Students Handbook-chunk 8", "Students Handbook, Title IX Hearings, Non-Title IX Grievance Process, Sexual Misconduct Sanctions, Hearing Panel Procedures, Informal Resolution, Grievance Process", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (14, "Texas Tech University Students Handbook-chunk 9", "Students Handbook, Sexual Misconduct Hearings, Grievance Process, Administrative and Panel Hearings, Title IX Coordinator, Disciplinary Sanctions, Appeal Procedures", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (15, "Texas Tech University Students Handbook-chunk 10", "Students Handbook, Student Organization Conduct, Code of Student Conduct, Investigation Process, Interim Actions, Voluntary Resolution, University Sanctions", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (16, "Texas Tech University Students Handbook-chunk 11", "Students Handbook, Student Organization Hearings, Pre-Hearing Process, Investigation Report, Conduct Procedures, Sanction Only Hearing, Appeals Process", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (17, "Texas Tech University Students Handbook-chunk 12", "Students Handbook, Academic Integrity, Anti-Discrimination Policy, Alcohol Policy, Class Absences, Grievance Procedures, Student Conduct", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (18, "Texas Tech University Students Handbook-chunk 13", "Students Handbook, Disability Services, FERPA Guidelines, Disciplinary Actions, Employment Grievances, Academic Appeals, Student Support Resources", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (19, "Texas Tech University Students Handbook-chunk 14", "Students Handbook, Student Organization Registration, Solicitation and Advertising, Student Government Association, Military and Veteran Programs, Student Identification, Student Support Services", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (20, "Texas Tech University Students Handbook-chunk 15", "Students Handbook, Campus Grounds Use, Expressive Activities, Amplification Equipment, Voluntary Withdrawal, Involuntary Withdrawal, Student Safety", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (21, "Texas Tech University Students Handbook-chunk 16", "Students Handbook, Student Organization Training, Campus Grounds Use, Facility Reservations, Amplification Equipment, Expressive Activities, Student Records", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf"),
-        (22, "Texas Tech University Students Handbook-chunk 17", "Students Handbook, Student Conduct Definitions, University Policies, Behavioral Intervention, Sexual Misconduct Definitions, Disciplinary Actions, Student Records", "https://www.depts.ttu.edu/dos/Studenthandbook2022forward/Student-Handbook-2023-2024.pdf")
-        # Add more initial data as needed
-    ]
-    c = conn.cursor()
-    c.executemany("INSERT OR REPLACE INTO documents (id, title, tags, links) VALUES (?, ?, ?, ?)", data)
-    conn.commit()
-
-def insert_document(title, tags, links):
-    if tags.strip() and links.strip():
-        conn = get_database_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO documents (title, tags, links) VALUES (?, ?, ?)",
-                  (title, tags, links))
-        conn.commit()
-        return True
-    return False
-
-def get_all_documents():
-    conn = get_database_connection()
-    c = conn.cursor()
-    c.execute("SELECT id, title, tags, links FROM documents WHERE tags != '' AND links != ''")
-    return c.fetchall()
-
-# NLP functions (keep your existing NLP functions here)
-# ...
-
-# Flask routes
-@app.route('/')
-def home():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/chat', methods=['POST'])
-def chat():
-    user_query = request.json['message']
-    answer, intent_data = get_answer(user_query)
-    return jsonify({'response': answer, 'intent_data': intent_data})
-
-@app.route('/database')
-def database_management():
-    return render_template_string(DATABASE_TEMPLATE)
-
-@app.route('/documents')
-def get_documents():
-    documents = get_all_documents()
-    return jsonify(documents)
-
-@app.route('/add_document', methods=['POST'])
-def add_document():
-    data = request.json
-    success = insert_document(data['title'], data['tags'], data['links'])
-    return jsonify({'success': success})
-
-@app.route('/delete_document', methods=['POST'])
-def delete_document():
-    data = request.json
-    conn = get_database_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM documents WHERE id = ?", (data['id'],))
-    success = c.rowcount > 0
-    conn.commit()
-    return jsonify({'success': success})
-
-# HTML Templates
+# HTML Templates (keep your existing HTML_TEMPLATE and DATABASE_TEMPLATE here)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -315,6 +196,7 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
+
 DATABASE_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -483,17 +365,121 @@ DATABASE_TEMPLATE = '''
 </html>
 '''
 
-# NLP functions (you should include your existing NLP functions here)
-def get_embedding(text):
-    response = client.embeddings.create(
-        model="text-embedding-ada-002",
-        input=text
-    )
-    return response.data[0].embedding
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)
 
-def query_pinecone(query, top_k=5):
+@app.route('/chat', methods=['POST'])
+def chat():
+    start_time = time.time()
+    try:
+        user_query = request.json['message']
+        current_app.logger.info(f"Received query: {user_query}")
+
+        # Initialize API clients
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        pc = Pinecone(api_key=PINECONE_API_KEY)
+        index = pc.Index(INDEX_NAME)
+        
+        current_app.logger.info("API clients initialized")
+
+        # Simplified processing for testing
+        simple_response = simplified_chat(user_query, client)
+        current_app.logger.info(f"Simple response generated: {simple_response[:100]}...")
+
+        # If simple chat works, try the full process
+        if simple_response:
+            answer, intent_data = get_answer(user_query, client, pc, index)
+            current_app.logger.info("Full answer generated")
+        else:
+            answer = "Failed to generate a simple response."
+            intent_data = {}
+
+        end_time = time.time()
+        current_app.logger.info(f"Total processing time: {end_time - start_time:.2f} seconds")
+
+        return jsonify({'response': answer, 'intent_data': intent_data})
+    except Exception as e:
+        current_app.logger.error(f"Error in chat route: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+def simplified_chat(query, client):
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": query}
+            ],
+            timeout=5  # 5-second timeout
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        current_app.logger.error(f"Error in simplified_chat: {str(e)}")
+        return None
+
+def get_answer(query, client, pc, index):
+    try:
+        current_app.logger.info("Starting get_answer function")
+        
+        intents = identify_intents(query, client)
+        current_app.logger.info(f"Identified intents: {intents}")
+        
+        intent_keywords = generate_keywords_per_intent(intents, client)
+        current_app.logger.info(f"Generated keywords: {intent_keywords}")
+        
+        intent_data = query_for_multiple_intents(intent_keywords, pc, index)
+        current_app.logger.info("Query for multiple intents completed")
+        
+        answer = generate_multi_intent_answer(query, intent_data, client)
+        current_app.logger.info("Multi-intent answer generated")
+        
+        return answer, intent_data
+    except Exception as e:
+        current_app.logger.error(f"Error in get_answer: {str(e)}")
+        raise
+
+def identify_intents(query, client):
+    intent_prompt = f"Identify the main intent or question within this query. Provide only one primary intent: {query}"
+    intent_response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are an intent identification assistant. Identify and provide only the primary intent or question within the given query."},
+            {"role": "user", "content": intent_prompt}
+        ],
+        timeout=5
+    )
+    intent = intent_response.choices[0].message.content.strip()
+    return [intent] if intent else []
+
+def generate_keywords_per_intent(intents, client):
+    intent_keywords = {}
+    for intent in intents:
+        keyword_prompt = f"Generate 5-10 relevant keywords or phrases for this intent, separated by commas: {intent}"
+        keyword_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a keyword extraction assistant. Generate relevant keywords or phrases for the given intent."},
+                {"role": "user", "content": keyword_prompt}
+            ],
+            timeout=5
+        )
+        keywords = keyword_response.choices[0].message.content.strip().split(',')
+        intent_keywords[intent] = [keyword.strip() for keyword in keywords]
+    return intent_keywords
+
+def query_for_multiple_intents(intent_keywords, pc, index):
+    intent_data = {}
+    for intent, keywords in intent_keywords.items():
+        pinecone_context = query_pinecone(" ".join(keywords), index)
+        intent_data[intent] = {
+            'pinecone_context': pinecone_context
+        }
+    return intent_data
+
+def query_pinecone(query, index):
     query_embedding = get_embedding(query)
-    results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
+    results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
     contexts = []
     for match in results['matches']:
         if 'chunk_text' in match['metadata']:
@@ -502,91 +488,49 @@ def query_pinecone(query, top_k=5):
             contexts.append(f"Content from {match['metadata'].get('file_name', 'unknown file')}")
     return " ".join(contexts)
 
-def identify_intents(query):
-    intent_prompt = f"Identify the main intent or question within this query. Provide only one primary intent: {query}"
-    intent_response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an intent identification assistant. Identify and provide only the primary intent or question within the given query."},
-            {"role": "user", "content": intent_prompt}
-        ]
+def get_embedding(text):
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=text
     )
-    intent = intent_response.choices[0].message.content.strip()
-    return [intent] if intent else []
+    return response.data[0].embedding
 
-def generate_keywords_per_intent(intents):
-    intent_keywords = {}
-    for intent in intents:
-        keyword_prompt = f"Generate 5-10 relevant keywords or phrases for this intent, separated by commas: {intent}"
-        keyword_response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a keyword extraction assistant. Generate relevant keywords or phrases for the given intent."},
-                {"role": "user", "content": keyword_prompt}
-            ]
-        )
-        keywords = keyword_response.choices[0].message.content.strip().split(',')
-        intent_keywords[intent] = [keyword.strip() for keyword in keywords]
-    return intent_keywords
-
-def query_db_for_keywords(keywords):
-    conn = get_database_connection()
-    c = conn.cursor()
-    query = """
-    SELECT DISTINCT id, title, tags, links 
-    FROM documents 
-    WHERE tags LIKE ?
-    """
-    results = []
-    for keyword in keywords:
-        c.execute(query, (f'%{keyword}%',))
-        for row in c.fetchall():
-            score = sum(SequenceMatcher(None, keyword.lower(), tag.lower()).ratio() for tag in row[2].split(','))
-            results.append((score, row))
-    
-    results.sort(reverse=True, key=lambda x: x[0])
-    return results[:3]
-
-def query_for_multiple_intents(intent_keywords):
-    intent_data = {}
-    all_db_results = set()
-    for intent, keywords in intent_keywords.items():
-        db_results = query_db_for_keywords(keywords)
-        new_db_results = [result for result in db_results if result[1][0] not in [r[1][0] for r in all_db_results]]
-        all_db_results.update(new_db_results)
-        pinecone_context = query_pinecone(" ".join(keywords))
-        intent_data[intent] = {
-            'db_results': new_db_results,
-            'pinecone_context': pinecone_context
-        }
-    return intent_data
-
-def generate_multi_intent_answer(query, intent_data):
-    context = "\n".join([f"Intent: {intent}\nDB Results: {data['db_results']}\nPinecone Context: {data['pinecone_context']}" for intent, data in intent_data.items()])
+def generate_multi_intent_answer(query, intent_data, client):
+    context = "\n".join([f"Intent: {intent}\nPinecone Context: {data['pinecone_context']}" for intent, data in intent_data.items()])
     max_context_tokens = 4000
     tokenizer = get_encoding("cl100k_base")
     truncated_context = tokenizer.decode(tokenizer.encode(context)[:max_context_tokens])
     
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "You are College Buddy, an AI assistant designed to help students with their academic queries..."},
             {"role": "user", "content": f"Query: {query}\n\nContext: {truncated_context}"}
-        ]
+        ],
+        timeout=15
     )
    
     return response.choices[0].message.content.strip()
 
-def get_answer(query):
-    intents = identify_intents(query)
-    intent_keywords = generate_keywords_per_intent(intents)
-    intent_data = query_for_multiple_intents(intent_keywords)
-    answer = generate_multi_intent_answer(query, intent_data)
-    return answer, intent_data
+@app.route('/database')
+def database_management():
+    return render_template_string(DATABASE_TEMPLATE)
+
+@app.route('/documents')
+def get_documents():
+    # This would typically query your database. For now, return an empty list.
+    return jsonify([])
+
+@app.route('/add_document', methods=['POST'])
+def add_document():
+    # This would typically add a document to your database. For now, just return success.
+    return jsonify({'success': True})
+
+@app.route('/delete_document', methods=['POST'])
+def delete_document():
+    # This would typically delete a document from your database. For now, just return success.
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
-    # Initialize database and load initial data
-    conn = get_database_connection()
-    init_db(conn)
-    load_initial_data()
     app.run(debug=True)
