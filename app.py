@@ -151,11 +151,11 @@ def get_answer(query):
             serializable_intent_data[intent] = {
                 'metadata_results': [
                     {
-                        'id': result['id'],
+                        'id': result.get('id', ''),
                         'metadata': {
-                            'title': result['metadata'].get('title', ''),
-                            'tags': result['metadata'].get('tags', ''),
-                            'links': result['metadata'].get('links', '')
+                            'title': result.get('metadata', {}).get('title', ''),
+                            'tags': result.get('metadata', {}).get('tags', ''),
+                            'links': result.get('metadata', {}).get('links', '')
                         }
                     } for result in data['metadata_results']
                 ],
@@ -166,6 +166,31 @@ def get_answer(query):
     except Exception as e:
         print(f"Error in get_answer: {str(e)}")
         return "I'm sorry, I encountered an error while processing your query.", {}
+
+def get_all_metadata():
+    results = index_metadata.query(vector=[0]*1536, top_k=10000, include_metadata=True)
+    return [
+        {
+            'id': match['id'],
+            'title': match['metadata'].get('title', ''),
+            'tags': match['metadata'].get('tags', ''),
+            'links': match['metadata'].get('links', '')
+        } for match in results['matches']
+    ]
+
+def insert_metadata(title, tags, links):
+    id = str(uuid.uuid4())
+    metadata = {
+        "title": title,
+        "tags": tags,
+        "links": links
+    }
+    embedding = get_embedding(f"{title} {tags} {links}")
+    index_metadata.upsert(vectors=[(id, embedding, metadata)])
+    return True
+
+def delete_metadata(id):
+    index_metadata.delete(ids=[id])
 
 # Flask routes
 @app.route('/')
@@ -180,49 +205,19 @@ def chat():
         'response': final_answer,
         'intent_data': intent_data
     })
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'})
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'})
-    if file and file.filename.endswith('.docx'):
-        filename = secure_filename(file.filename)
-        file_id = str(uuid.uuid4())
-        text = extract_text_from_docx(file)
-        token_count = num_tokens_from_string(text)
-        upsert_to_pinecone(text, filename, file_id, index_content)
-        return jsonify({
-            'message': 'File uploaded successfully',
-            'filename': filename,
-            'file_id': file_id,
-            'token_count': token_count
-        })
-    return jsonify({'error': 'Invalid file format'})
 
 @app.route('/database')
 def database():
-    return render_template_string(DATABASE_TEMPLATE)
-
-@app.route('/metadata', methods=['GET'])
-def get_metadata():
     metadata = get_all_metadata()
-    return jsonify(metadata)
+    return render_template_string(DATABASE_TEMPLATE, metadata=metadata)
 
-@app.route('/metadata', methods=['POST'])
+@app.route('/add_metadata', methods=['POST'])
 def add_metadata():
     data = request.json
     success = insert_metadata(data['title'], data['tags'], data['links'])
     return jsonify({'success': success})
 
-@app.route('/metadata/<id>', methods=['PUT'])
-def update_metadata_route(id):
-    data = request.json
-    update_metadata(id, data['title'], data['tags'], data['links'])
-    return jsonify({'success': True})
-
-@app.route('/metadata/<id>', methods=['DELETE'])
+@app.route('/delete_metadata/<id>', methods=['DELETE'])
 def delete_metadata_route(id):
     delete_metadata(id)
     return jsonify({'success': True})
@@ -392,6 +387,7 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
+
 DATABASE_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -404,18 +400,25 @@ DATABASE_TEMPLATE = '''
         body {
             font-family: Arial, sans-serif;
             line-height: 1.6;
-            margin: 0;
-            padding: 20px;
+            color: #333;
             max-width: 800px;
             margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         h1, h2 {
-            color: #333;
+            color: #0066cc;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-top: 20px;
         }
         th, td {
             border: 1px solid #ddd;
@@ -427,102 +430,103 @@ DATABASE_TEMPLATE = '''
         }
         input[type="text"] {
             width: 100%;
-            padding: 5px;
-            margin-bottom: 10px;
+            padding: 8px;
+            margin: 5px 0;
         }
         button {
             padding: 10px 20px;
-            background-color: #007bff;
+            background-color: #0066cc;
             color: white;
             border: none;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
         button:hover {
             background-color: #0056b3;
         }
+        .form-group {
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
-    <h1>Database Management</h1>
-    <button onclick="window.location.href='/'">Back to Chat</button>
+    <div class="container">
+        <h1>Database Management</h1>
+        <button onclick="window.location.href='/'">Back to Chat</button>
 
-    <div id="metadata-container"></div>
-    
-    <h2>Add New Metadata</h2>
-    <input type="text" id="new-title" placeholder="Title">
-    <input type="text" id="new-tags" placeholder="Tags (comma-separated)">
-    <input type="text" id="new-links" placeholder="Links">
-    <button onclick="addMetadata()">Add Metadata</button>
+        <h2>Add New Document</h2>
+        <div class="form-group">
+            <input type="text" id="new-title" placeholder="Title">
+        </div>
+        <div class="form-group">
+            <input type="text" id="new-tags" placeholder="Tags (comma-separated)">
+        </div>
+        <div class="form-group">
+            <input type="text" id="new-links" placeholder="Links">
+        </div>
+        <button onclick="addMetadata()">Add Document</button>
+
+        <h2>Existing Documents</h2>
+        <table id="metadata-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Tags</th>
+                    <th>Links</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in metadata %}
+                <tr>
+                    <td>{{ item.title }}</td>
+                    <td>{{ item.tags }}</td>
+                    <td>{{ item.links }}</td>
+                    <td><button onclick="deleteMetadata('{{ item.id }}')">Delete</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <script>
-        function loadMetadata() {
-            axios.get('/metadata')
+        function addMetadata() {
+            const title = document.getElementById('new-title').value;
+            const tags = document.getElementById('new-tags').value;
+            const links = document.getElementById('new-links').value;
+            
+            axios.post('/add_metadata', { title, tags, links })
                 .then(function (response) {
-                    var container = document.getElementById('metadata-container');
-                    var table = '<table><tr><th>Title</th><th>Tags</th><th>Links</th><th>Actions</th></tr>';
-                    response.data.forEach(function(item) {
-                        table += '<tr>';
-                        table += '<td>' + item[1] + '</td>';
-                        table += '<td>' + item[2] + '</td>';
-                        table += '<td>' + item[3] + '</td>';
-                        table += '<td><button onclick="deleteMetadata(\'' + item[0] + '\')">Delete</button></td>';
-                        table += '</tr>';
-                    });
-                    table += '</table>';
-                    container.innerHTML = table;
+                    if (response.data.success) {
+                        alert('Document added successfully');
+                        location.reload();
+                    } else {
+                        alert('Failed to add document');
+                    }
                 })
                 .catch(function (error) {
                     console.error('Error:', error);
+                    alert('Error adding document');
                 });
         }
 
-        function addMetadata() {
-            var title = document.getElementById('new-title').value;
-            var tags = document.getElementById('new-tags').value;
-            var links = document.getElementById('new-links').value;
-            
-            axios.post('/metadata', {
-                title: title,
-                tags: tags,
-                links: links
-            })
-            .then(function (response) {
-                if (response.data.success) {
-                    alert('Metadata added successfully');
-                    loadMetadata();
-                    document.getElementById('new-title').value = '';
-                    document.getElementById('new-tags').value = '';
-                    document.getElementById('new-links').value = '';
-                } else {
-                    alert('Failed to add metadata');
-                }
-            })
-            .catch(function (error) {
-                console.error('Error:', error);
-                alert('Error adding metadata');
-            });
-        }
-
         function deleteMetadata(id) {
-            if (confirm('Are you sure you want to delete this metadata?')) {
-                axios.delete('/metadata/' + id)
+            if (confirm('Are you sure you want to delete this document?')) {
+                axios.delete('/delete_metadata/' + id)
                     .then(function (response) {
                         if (response.data.success) {
-                            alert('Metadata deleted successfully');
-                            loadMetadata();
+                            alert('Document deleted successfully');
+                            location.reload();
                         } else {
-                            alert('Failed to delete metadata');
+                            alert('Failed to delete document');
                         }
                     })
                     .catch(function (error) {
                         console.error('Error:', error);
-                        alert('Error deleting metadata');
+                        alert('Error deleting document');
                     });
             }
         }
-
-        // Load metadata when the page loads
-        loadMetadata();
     </script>
 </body>
 </html>
