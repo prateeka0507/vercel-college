@@ -51,64 +51,12 @@ EXAMPLE_QUESTIONS = [
 ]
 
 # Helper functions
-def extract_text_from_docx(file):
-    doc = Document(file)
-    text = "\n".join([para.text for para in doc.paragraphs])
-    return text
-
-def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
 def get_embedding(text):
     response = client.embeddings.create(
         model="text-embedding-ada-002",
         input=text
     )
     return response.data[0].embedding
-
-def upsert_to_pinecone(text, file_name, file_id, index):
-    chunks = [text[i:i+8000] for i in range(0, len(text), 8000)]
-    for i, chunk in enumerate(chunks):
-        embedding = get_embedding(chunk)
-        metadata = {
-            "file_name": file_name,
-            "file_id": file_id,
-            "chunk_id": i,
-            "chunk_text": chunk
-        }
-        index.upsert(vectors=[(f"{file_id}_{i}", embedding, metadata)])
-        time.sleep(1)  # To avoid rate limiting
-
-def insert_metadata(title, tags, links):
-    if tags.strip() and links.strip():
-        id = str(uuid.uuid4())
-        metadata = {
-            "title": title,
-            "tags": tags,
-            "links": links
-        }
-        embedding = get_embedding(f"{title} {tags} {links}")
-        index_metadata.upsert(vectors=[(id, embedding, metadata)])
-        return True
-    return False
-
-def get_all_metadata():
-    results = index_metadata.query(vector=[0]*1536, top_k=10000, include_metadata=True)
-    return [(match['id'], match['metadata']['title'], match['metadata']['tags'], match['metadata']['links']) for match in results['matches']]
-
-def update_metadata(id, title, tags, links):
-    metadata = {
-        "title": title,
-        "tags": tags,
-        "links": links
-    }
-    embedding = get_embedding(f"{title} {tags} {links}")
-    index_metadata.upsert(vectors=[(id, embedding, metadata)])
-
-def delete_metadata(id):
-    index_metadata.delete(ids=[id])
 
 def query_pinecone(query, index, top_k=5):
     query_embedding = get_embedding(query)
@@ -164,15 +112,11 @@ def query_for_multiple_intents(intent_keywords):
         }
     return intent_data
 
-def truncate_text(text, max_tokens):
-    tokenizer = get_encoding("cl100k_base")
-    tokens = tokenizer.encode(text)
-    return tokenizer.decode(tokens[:max_tokens])
-
 def generate_multi_intent_answer(query, intent_data):
     context = "\n".join([f"Intent: {intent}\nMetadata Results: {data['metadata_results']}\nPinecone Context: {data['pinecone_context']}" for intent, data in intent_data.items()])
     max_context_tokens = 4000
-    truncated_context = truncate_text(context, max_context_tokens)
+    tokenizer = get_encoding("cl100k_base")
+    truncated_context = tokenizer.decode(tokenizer.encode(context)[:max_context_tokens])
     
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -194,33 +138,34 @@ def generate_multi_intent_answer(query, intent_data):
    
     return response.choices[0].message.content.strip()
 
-def extract_keywords_from_response(response):
-    keyword_prompt = f"Extract 5-10 key terms or phrases from this text, separated by commas: {response}"
-    keyword_response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a keyword extraction assistant. Extract key terms or phrases from the given text."},
-            {"role": "user", "content": keyword_prompt}
-        ]
-    )
-    keywords = keyword_response.choices[0].message.content.strip().split(',')
-    return [keyword.strip() for keyword in keywords]
-
 def get_answer(query):
-    intents = identify_intents(query)
-    intent_keywords = generate_keywords_per_intent(intents)
-    intent_data = query_for_multiple_intents(intent_keywords)
-    initial_answer = generate_multi_intent_answer(query, intent_data)
-    
-    response_keywords = extract_keywords_from_response(initial_answer)
-    
-    all_keywords = list(set(intent_keywords[intents[0]] + response_keywords))
-    
-    expanded_intent_data = query_for_multiple_intents({query: all_keywords})
-    
-    final_answer = generate_multi_intent_answer(query, expanded_intent_data)
-    
-    return final_answer, expanded_intent_data, all_keywords
+    try:
+        intents = identify_intents(query)
+        intent_keywords = generate_keywords_per_intent(intents)
+        intent_data = query_for_multiple_intents(intent_keywords)
+        final_answer = generate_multi_intent_answer(query, intent_data)
+        
+        # Ensure intent_data is JSON serializable
+        serializable_intent_data = {}
+        for intent, data in intent_data.items():
+            serializable_intent_data[intent] = {
+                'metadata_results': [
+                    {
+                        'id': result['id'],
+                        'metadata': {
+                            'title': result['metadata'].get('title', ''),
+                            'tags': result['metadata'].get('tags', ''),
+                            'links': result['metadata'].get('links', '')
+                        }
+                    } for result in data['metadata_results']
+                ],
+                'pinecone_context': data['pinecone_context']
+            }
+        
+        return final_answer, serializable_intent_data
+    except Exception as e:
+        print(f"Error in get_answer: {str(e)}")
+        return "I'm sorry, I encountered an error while processing your query.", {}
 
 # Flask routes
 @app.route('/')
@@ -230,13 +175,11 @@ def home():
 @app.route('/chat', methods=['POST'])
 def chat():
     user_query = request.json['message']
-    final_answer, intent_data, all_keywords = get_answer(user_query)
+    final_answer, intent_data = get_answer(user_query)
     return jsonify({
         'response': final_answer,
-        'keywords': all_keywords,
         'intent_data': intent_data
     })
-
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -297,139 +240,150 @@ HTML_TEMPLATE = '''
         body {
             font-family: Arial, sans-serif;
             line-height: 1.6;
-            margin: 0;
-            padding: 20px;
+            color: #333;
             max-width: 800px;
             margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         h1, h2 {
-            color: #333;
+            color: #0066cc;
         }
         #chat-container {
-            border: 1px solid #ddd;
-            padding: 20px;
-            margin-bottom: 20px;
             height: 300px;
             overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 20px;
+            background-color: #fff;
         }
         #user-input {
             width: 70%;
             padding: 10px;
+            margin-right: 10px;
         }
         button {
             padding: 10px 20px;
-            background-color: #007bff;
+            background-color: #0066cc;
             color: white;
             border: none;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
         button:hover {
             background-color: #0056b3;
         }
-        #file-upload {
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e1f5fe;
+            text-align: right;
+        }
+        .bot-message {
+            background-color: #f0f0f0;
+        }
+        .popular-questions {
             margin-top: 20px;
         }
-        #answer-container {
-            margin-top: 20px;
-            border: 1px solid #ddd;
+        .popular-question {
+            background-color: #e1f5fe;
             padding: 10px;
-            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .popular-question:hover {
+            background-color: #b3e5fc;
+        }
+        .sidebar {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>College Buddy Assistant</h1>
-    <div id="chat-container"></div>
-    <input type="text" id="user-input" placeholder="Ask your question...">
-    <button onclick="sendMessage()">Send</button>
-    
-    <div id="answer-container"></div>
-    
-    <h2>Popular Questions</h2>
-    <div id="popular-questions">
-        {% for question in example_questions %}
-            <p onclick="askQuestion('{{ question }}')">{{ question }}</p>
-        {% endfor %}
+    <div class="container">
+        <h1>College Buddy Assistant</h1>
+        <p>Welcome to College Buddy! I am here to help you stay organized, find information fast and provide assistance. Feel free to ask me a question below.</p>
+        
+        <div id="chat-container"></div>
+        
+        <input type="text" id="user-input" placeholder="Ask your question...">
+        <button onclick="sendMessage()">Send</button>
+        
+        <div class="popular-questions">
+            <h2>Popular Questions</h2>
+            <div id="popular-questions-container"></div>
         </div>
-        <div id="file-upload">
-        <h2>Upload Document</h2>
-        <input type="file" id="document-file" accept=".docx">
-        <button onclick="uploadDocument()">Upload</button>
+        
+        <div class="sidebar">
+            <h2>Manage Database</h2>
+            <button onclick="window.location.href='/database'">View/Manage Database</button>
+        </div>
     </div>
-    
-    <button onclick="window.location.href='/database'">Manage Database</button>
 
     <script>
-        function sendMessage() {
-            var userInput = document.getElementById('user-input');
-            var query = userInput.value.trim();
-            if (query !== '') {
-                askQuestion(query);
-                userInput.value = '';
-            }
+        // Function to get random items from an array
+        function getRandomItems(arr, count) {
+            const shuffled = arr.sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, count);
         }
 
-        function askQuestion(query) {
-            var chatContainer = document.getElementById('chat-container');
-            var answerContainer = document.getElementById('answer-container');
+        // Populate popular questions with 3 random questions
+        const popularQuestionsContainer = document.getElementById('popular-questions-container');
+        const randomQuestions = getRandomItems({{ example_questions|tojson }}, 3);
+        
+        randomQuestions.forEach(question => {
+            const div = document.createElement('div');
+            div.className = 'popular-question';
+            div.textContent = question;
+            div.onclick = () => {
+                document.getElementById('user-input').value = question;
+                sendMessage();
+            };
+            popularQuestionsContainer.appendChild(div);
+        });
+
+        function sendMessage() {
+            const userInput = document.getElementById('user-input');
+            const message = userInput.value;
+            if (message.trim() === '') return;
+
+            addMessageToChat('You', message, 'user-message');
             
-            chatContainer.innerHTML += '<p><strong>You:</strong> ' + query + '</p>';
-            
-            axios.post('/chat', { message: query })
-                .then(function (response) {
-                    chatContainer.innerHTML += '<p><strong>College Buddy:</strong> ' + response.data.response + '</p>';
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    
-                    var answerHtml = '<h3>Detailed Answer:</h3>';
-                    answerHtml += '<p>' + response.data.response + '</p>';
-                    answerHtml += '<h4>Related Keywords:</h4>';
-                    answerHtml += '<p>' + response.data.keywords.join(', ') + '</p>';
-                    answerHtml += '<h4>Related Documents:</h4>';
-                    var documents = new Set();
-                    for (var intent in response.data.intent_data) {
-                        response.data.intent_data[intent].metadata_results.forEach(function(result) {
-                            if (!documents.has(result.id)) {
-                                documents.add(result.id);
-                                answerHtml += '<p>- ' + result.metadata.title + '</p>';
-                            }
-                        });
-                    }
-                    answerContainer.innerHTML = answerHtml;
+            axios.post('/chat', { message: message })
+                .then(response => {
+                    addMessageToChat('College Buddy', response.data.response, 'bot-message');
+                    userInput.value = '';
                 })
-                .catch(function (error) {
+                .catch(error => {
                     console.error('Error:', error);
-                    chatContainer.innerHTML += '<p><strong>Error:</strong> Unable to process your question. Please try again.</p>';
+                    addMessageToChat('College Buddy', 'Sorry, I encountered an error. Please try again.', 'bot-message');
                 });
         }
 
-        function uploadDocument() {
-            var fileInput = document.getElementById('document-file');
-            var file = fileInput.files[0];
-            if (!file) {
-                alert('Please select a file to upload');
-                return;
-            }
-
-            var formData = new FormData();
-            formData.append('file', file);
-
-            axios.post('/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            })
-            .then(function (response) {
-                alert('File uploaded successfully: ' + response.data.filename);
-                fileInput.value = '';
-            })
-            .catch(function (error) {
-                console.error('Error:', error);
-                alert('Error uploading file');
-            });
+        function addMessageToChat(sender, message, className) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${className}`;
+            messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // Add event listener for Enter key
-        document.getElementById('user-input').addEventListener('keypress', function (e) {
+        // Allow sending message with Enter key
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
@@ -438,7 +392,6 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
-
 DATABASE_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
