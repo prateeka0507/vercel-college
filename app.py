@@ -54,7 +54,7 @@ EXAMPLE_QUESTIONS = [
 ]
 
 def get_background_image():
-    image_path = r"C:\Users\My\Downloads\texas tech image 1.jpg"
+    image_path = r"https://github.com/prateeka0507/vercel-college/blob/main/texas%20tech%20image%201.jpg"
     try:
         with open(image_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
@@ -64,7 +64,7 @@ def get_background_image():
         return ""  # Return an empty string if the file is not found
 
 def get_logo_image():
-    logo_path = r"C:\Users\My\Downloads\Texas_Tech logo 2.png"
+    logo_path = r"https://github.com/prateeka0507/vercel-college/blob/main/Texas_Tech%20logo%202.png"
     try:
         with open(logo_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
