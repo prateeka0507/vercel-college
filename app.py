@@ -54,24 +54,23 @@ EXAMPLE_QUESTIONS = [
 ]
 
 def get_background_image():
-    image_path = r"https://github.com/prateeka0507/vercel-college/blob/main/texas%20tech%20image%201.jpg"
+    image_path = "texas tech image 1.jpg"
     try:
         with open(image_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         return f"data:image/jpeg;base64,{encoded_string}"
     except FileNotFoundError:
         print(f"Background image not found at {image_path}")
-        return ""  # Return an empty string if the file is not found
-
+        return ""
 def get_logo_image():
-    logo_path = r"https://github.com/prateeka0507/vercel-college/blob/main/Texas_Tech%20logo%202.png"
+    logo_path = "Texas_Tech logo 2.png"
     try:
         with open(logo_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         return f"data:image/png;base64,{encoded_string}"
     except FileNotFoundError:
         print(f"Logo image not found at {logo_path}")
-        return ""  # Return an empty string if the file is not found
+        return ""
 
 # Flask routes
 @app.route('/')
