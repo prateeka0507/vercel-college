@@ -62,6 +62,7 @@ def get_background_image():
     except FileNotFoundError:
         print(f"Background image not found at {image_path}")
         return ""
+
 def get_logo_image():
     logo_path = "Texas_Tech logo 2.png"
     try:
@@ -120,8 +121,6 @@ def upload_file():
         file.save(file_path)
         # Here you can add logic to process the file, e.g., extract text and add to Pinecone
         return jsonify({'success': True, 'filename': filename})
-
-# HTML Templates
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -135,11 +134,13 @@ HTML_TEMPLATE = '''
         body {
             font-family: 'Poppins', sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: #5d5d5d;
             margin: 0;
             padding: 0;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
+            min-height: 100vh;
             justify-content: center;
             align-items: center;
             background-image: url('{{ background_image }}');
@@ -150,23 +151,23 @@ HTML_TEMPLATE = '''
         .container {
             max-width: 1200px;
             margin: 20px;
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 245, 238, 0.9); /* Pastel peach */
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             display: grid;
             grid-template-columns: 3fr 1fr;
+            flex: 1;
         }
         .main-content, .sidebar {
             padding: 30px;
         }
         h1, h2, h3 {
-            color: #4a4a4a;
+            color: #7b6079; /* Pastel purple */
         }
         h1 {
             font-size: 2.5em;
             margin-bottom: 20px;
-            color: #4a4a4a;
         }
         .header {
             display: flex;
@@ -181,24 +182,26 @@ HTML_TEMPLATE = '''
         #chat-container {
             height: 400px;
             overflow-y: auto;
-            border: 2px solid #4a4a4a;
+            border: 2px solid #b2d8d8; /* Pastel teal */
             padding: 15px;
             margin-bottom: 20px;
             background-color: rgba(255, 255, 255, 0.8);
             border-radius: 15px;
+            display: flex;
+            flex-direction: column; /* Change to column for top-to-bottom scrolling */
         }
         #user-input {
             width: calc(100% - 120px);
             padding: 12px;
-            border: 2px solid #4a4a4a;
+            border: 2px solid #b2d8d8; /* Pastel teal */
             border-radius: 25px;
             font-size: 16px;
             background-color: rgba(255, 255, 255, 0.8);
         }
         button {
             padding: 12px 25px;
-            background-color: #4a4a4a;
-            color: white;
+            background-color: #aec6cf; /* Pastel blue */
+            color: #5d5d5d;
             border: none;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -207,7 +210,7 @@ HTML_TEMPLATE = '''
             font-weight: 500;
         }
         button:hover {
-            background-color: #990000;
+            background-color: #f7cac9; /* Pastel pink */
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -223,29 +226,29 @@ HTML_TEMPLATE = '''
             to { opacity: 1; transform: translateY(0); }
         }
         .user-message {
-            background-color: #4a4a4a;
-            color: white;
-            align-self: flex-end;
-            margin-left: auto;
+            background-color: #dcd0ff; /* Pastel lavender */
+            color: #5d5d5d;
+            align-self: flex-start; /* Align to the left */
+            margin-right: auto; /* Push to the left */
         }
         .bot-message {
-            background-color: rgba(255, 255, 255, 0.8);
+            background-color: #e0f0e3; /* Pastel mint */
             align-self: flex-start;
         }
         .popular-questions {
             margin-top: 30px;
         }
         .popular-question {
-            background-color: rgba(204, 0, 0, 0.1);
+            background-color: rgba(255, 223, 211, 0.5); /* Light pastel orange */
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 15px;
             cursor: pointer;
             transition: all 0.3s ease;
-            color: #333;
+            color: #5d5d5d;
         }
         .popular-question:hover {
-            background-color: rgba(204, 0, 0, 0.2);
+            background-color: rgba(255, 223, 211, 0.8); /* Darker pastel orange */
             transform: translateY(-3px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -256,8 +259,8 @@ HTML_TEMPLATE = '''
             border-radius: 15px;
         }
         .sidebar {
-            background-color: rgba(255, 255, 255, 0.8);
-            border-left: 1px solid #e0e0e0;
+            background-color: rgba(255, 245, 238, 0.8); /* Lighter pastel peach */
+            border-left: 1px solid #f7cac9; /* Pastel pink */
         }
         .file-upload {
             margin-top: 20px;
@@ -268,14 +271,14 @@ HTML_TEMPLATE = '''
         .file-upload label {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #4a4a4a;
-            color: white;
+            background-color: #aec6cf; /* Pastel blue */
+            color: #5d5d5d;
             border-radius: 25px;
             cursor: pointer;
             transition: all 0.3s ease;
         }
         .file-upload label:hover {
-            background-color: #990000;
+            background-color: #f7cac9; /* Pastel pink */
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -283,14 +286,33 @@ HTML_TEMPLATE = '''
             margin-top: 10px;
             font-style: italic;
         }
+        .admin-controls {
+            margin-top: 20px;
+        }
+        .admin-controls button {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .hidden {
+            display: none;
+        }
         @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
             }
             .sidebar {
                 border-left: none;
-                border-top: 1px solid #e0e0e0;
+                border-top: 1px solid #f7cac9; /* Pastel pink */
             }
+
+        }
+        .copyright {
+            text-align: center;
+            padding: 15px;
+            background-color: rgba(255, 245, 238, 0.9);
+            color: #7b6079;
+            font-size: 14px;
+            border-top: 1px solid #f7cac9;
         }
     </style>
 </head>
@@ -312,21 +334,27 @@ HTML_TEMPLATE = '''
         </div>
         
         <div class="sidebar">
-            <h2>Quick Access</h2>
-            <button onclick="window.location.href='/database'" style="width: 100%; margin-bottom: 20px;">Manage Database</button>
-            
             <div class="popular-questions">
                 <h3>Popular Questions</h3>
                 <div id="popular-questions-container"></div>
             </div>
 
-            <div class="file-upload">
-                <h3>Upload Document</h3>
-                <label for="file-input">Choose File</label>
-                <input type="file" id="file-input" onchange="uploadFile()">
-                <div id="upload-status"></div>
+            <div class="admin-controls">
+                <button onclick="toggleAdminControls()">Admin Controls</button>
+                <div id="admin-buttons" class="hidden">
+                    <button onclick="window.location.href='/database'" style="width: 100%; margin-bottom: 10px;">Manage Database</button>
+                    <div class="file-upload">
+                        <label for="file-input">Upload Document</label>
+                        <input type="file" id="file-input" onchange="uploadFile()">
+                    </div>
+                </div>
             </div>
+            <div id="upload-status"></div>
         </div>
+        <div class="copyright">
+            &copy; 2024 KLM Solutions. All rights reserved.
+        </div>
+    </div>
     </div>
 
     <script>
@@ -380,16 +408,37 @@ HTML_TEMPLATE = '''
 
             addMessageToChat('You', message, 'user-message');
             
+            // Create a placeholder for the bot's response
+            const botMessageElement = document.createElement('div');
+            botMessageElement.className = 'message bot-message';
+            botMessageElement.innerHTML = '<strong>College Buddy:</strong> <span id="bot-response"></span>';
+            document.getElementById('chat-container').appendChild(botMessageElement);
+
             axios.post('/chat', { message: message })
                 .then(response => {
-                    addMessageToChat('College Buddy', response.data.response, 'bot-message');
+                    simulateStreaming(response.data.response, 'bot-response');
                     displayRelatedInfo(response.data.intent_data);
                     userInput.value = '';
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    addMessageToChat('College Buddy', 'Sorry, I encountered an error. Please try again.', 'bot-message');
+                    document.getElementById('bot-response').textContent = 'Sorry, I encountered an error. Please try again.';
                 });
+        }
+
+        function simulateStreaming(text, elementId) {
+            const element = document.getElementById(elementId);
+            let index = 0;
+
+            function addNextChar() {
+                if (index < text.length) {
+                    element.textContent += text.charAt(index);
+                    index++;
+                    setTimeout(addNextChar, 20); // Adjust the delay as needed
+                }
+            }
+
+            addNextChar();
         }
 
         function addMessageToChat(sender, message, className) {
@@ -434,6 +483,11 @@ HTML_TEMPLATE = '''
             fileInput.value = ''; // Reset file input
         }
 
+        function toggleAdminControls() {
+            const adminButtons = document.getElementById('admin-buttons');
+            adminButtons.classList.toggle('hidden');
+        }
+
         document.getElementById('user-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
@@ -457,11 +511,12 @@ DATABASE_TEMPLATE = '''
         body {
             font-family: 'Poppins', sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: #5d5d5d;
             margin: 0;
             padding: 20px;
-            min-height: 100vh;
             display: flex;
+            flex-direction: column;
+            min-height: 100vh;
             justify-content: center;
             align-items: flex-start;
             background-image: url('{{ background_image }}');
@@ -472,26 +527,26 @@ DATABASE_TEMPLATE = '''
         .container {
             width: 100%;
             max-width: 1000px;
-            background-color: rgba(255, 255, 255, 0.95);
+            background-color: rgba(255, 245, 238, 0.95); /* Pastel peach */
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             padding: 30px;
+            flex: 1;
         }
         .card {
             background-color: rgba(255, 255, 255, 0.9);
             border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
             padding: 25px;
             margin-bottom: 30px;
         }
         h1, h2 {
-            color: #4a4a4a;
+            color: #7b6079; /* Pastel purple */
             margin-top: 0;
         }
         h1 {
             font-size: 2.5em;
-            color: #4a4a4a;
             margin-bottom: 20px;
         }
         .header {
@@ -499,7 +554,7 @@ DATABASE_TEMPLATE = '''
             align-items: center;
             margin-bottom: 20px;
         }
-        .logo {
+                .logo {
             width: 100px;
             height: auto;
             margin-right: 20px;
@@ -508,22 +563,25 @@ DATABASE_TEMPLATE = '''
             overflow-x: auto;
             margin-top: 20px;
             border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
         }
         table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
             background-color: rgba(255, 255, 255, 0.9);
+            table-layout: fixed; /* Added to ensure consistent column widths */
         }
         th, td {
             padding: 15px;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0f0e3; /* Pastel mint */
+            word-wrap: break-word; /* Allow long words to break and wrap */
+            overflow-wrap: break-word; /* Alternative for word-wrap */
         }
         th {
-            background-color: #4a4a4a;
-            color: white;
+            background-color: #aec6cf; /* Pastel blue */
+            color: #5d5d5d;
             font-weight: 500;
             position: sticky;
             top: 0;
@@ -538,7 +596,7 @@ DATABASE_TEMPLATE = '''
             width: 100%;
             padding: 12px;
             margin: 8px 0;
-            border: 2px solid #4a4a4a;
+            border: 2px solid #b2d8d8; /* Pastel teal */
             border-radius: 25px;
             box-sizing: border-box;
             font-size: 16px;
@@ -546,8 +604,8 @@ DATABASE_TEMPLATE = '''
         }
         button {
             padding: 12px 25px;
-            background-color: #4a4a4a;
-            color: white;
+            background-color: #aec6cf; /* Pastel blue */
+            color: #5d5d5d;
             border: none;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -556,7 +614,7 @@ DATABASE_TEMPLATE = '''
             font-weight: 500;
         }
         button:hover {
-            background-color: #990000;
+            background-color: #f7cac9; /* Pastel pink */
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -565,16 +623,17 @@ DATABASE_TEMPLATE = '''
         }
         .action-buttons {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
             margin-top: 20px;
+            margin-bottom: 20px;
         }
         .delete-btn {
-            background-color: #ff6b6b;
+            background-color: #ffd1dc; /* Light pastel pink */
             padding: 8px 15px;
             font-size: 14px;
         }
         .delete-btn:hover {
-            background-color: #ee5253;
+            background-color: #ffb3ba; /* Darker pastel pink */
         }
         @media (max-width: 768px) {
             .container {
@@ -583,6 +642,14 @@ DATABASE_TEMPLATE = '''
             .card {
                 padding: 20px;
             }
+        }
+        .copyright {
+            text-align: center;
+            padding: 15px;
+            background-color: rgba(255, 245, 238, 0.9);
+            color: #7b6079;
+            font-size: 14px;
+            border-top: 1px solid #f7cac9;
         }
     </style>
 </head>
@@ -616,10 +683,10 @@ DATABASE_TEMPLATE = '''
                 <table id="metadata-table">
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Tags</th>
-                            <th>Links</th>
-                            <th>Action</th>
+                            <th style="width: 25%;">Title</th>
+                            <th style="width: 35%;">Tags</th>
+                            <th style="width: 30%;">Links</th>
+                            <th style="width: 10%;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -635,6 +702,10 @@ DATABASE_TEMPLATE = '''
                 </table>
             </div>
         </div>
+        <div class="copyright">
+            &copy; 2024 KLM Solutions. All rights reserved.
+        </div>
+    </div>
     </div>
 
     <script>
@@ -684,6 +755,7 @@ DATABASE_TEMPLATE = '''
 </body>
 </html>
 '''
+
 
 # Helper functions
 def get_embedding(text):
@@ -769,7 +841,7 @@ def generate_multi_intent_answer(query, intent_data):
 1. Focus on addressing all the intents of the query and give related documents for all the intents.
 2. Provide accurate, relevant information derived from the provided context.
 3. If the context doesn't contain sufficient information to answer the query, state this clearly.
-             4. Maintain a friendly, supportive tone appropriate for assisting students.
+4. Maintain a friendly, supportive tone appropriate for assisting students.
 5. Provide concise yet comprehensive answers, breaking down complex concepts when necessary.
 6. If asked about topics beyond the scope of the provided context, politely state that you don't have that information.
 7. Encourage critical thinking by guiding students towards understanding rather than simply providing direct answers.
