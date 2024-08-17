@@ -10,7 +10,7 @@ import time
 import random
 from docx import Document
 import base64
-
+import re
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -72,6 +72,46 @@ def get_logo_image():
     except FileNotFoundError:
         print(f"Logo image not found at {logo_path}")
         return ""
+def structure_gpt_response(raw_response):
+    structured_response = {
+        'introduction': '',
+        'points': []
+    }
+    
+    # Split the response into lines
+    lines = raw_response.split('\n')
+    
+    # Extract introduction (first non-empty line)
+    for line in lines:
+        if line.strip():
+            structured_response['introduction'] = line.strip()
+            break
+    
+    # Extract numbered points
+    current_point = None
+    for line in lines[1:]:  # Skip the first line (introduction)
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check for numbered points
+        match = re.match(r'(\d+)\.\s*\*\*(.*?)\*\*:', line)
+        if match:
+            if current_point:
+                structured_response['points'].append(current_point)
+            current_point = {
+                'number': match.group(1),
+                'title': match.group(2),
+                'details': []
+            }
+        elif current_point:
+            current_point['details'].append(line)
+    
+    # Add the last point if exists
+    if current_point:
+        structured_response['points'].append(current_point)
+    
+    return structured_response
 
 # Flask routes
 @app.route('/')
@@ -84,11 +124,20 @@ def home():
 def chat():
     user_query = request.json['message']
     final_answer, intent_data = get_answer(user_query)
+    
+    # Structure the GPT response
+    structured_response = structure_gpt_response(final_answer)
+    
     return jsonify({
-        'response': final_answer,
+        'response': structured_response,
         'intent_data': intent_data
     })
-
+    
+    return jsonify({
+        'response': structured_response,
+        'full_response':final_answer,
+        'intent_data': intent_data
+    })
 @app.route('/database')
 def database():
     metadata = get_all_metadata()
@@ -464,6 +513,25 @@ HTML_TEMPLATE = r'''
                 }
             }
         }
+        function formatBotResponse(response) {
+    let formattedResponse = '<div class="bot-response">';
+    formattedResponse += `<p class="introduction">${response.introduction}</p>`;
+    
+    response.points.forEach(point => {
+        formattedResponse += `
+            <div class="point">
+                <h3>${point.number}. ${point.title}</h3>
+                <ul>
+                    ${point.details.map(detail => `<li>${detail}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    });
+    
+    formattedResponse += '</div>';
+    return formattedResponse;
+}
+
 
         function sendMessage() {
         const userInput = document.getElementById('user-input');
