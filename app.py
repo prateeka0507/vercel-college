@@ -466,52 +466,49 @@ HTML_TEMPLATE = r'''
         }
 
         function sendMessage() {
-            const userInput = document.getElementById('user-input');
-            const message = userInput.value;
-            if (message.trim() === '') return;
-
-            addMessageToChat('You', message, 'user-message');
-            
-            const botMessageElement = document.createElement('div');
-            botMessageElement.className = 'message bot-message';
-            botMessageElement.innerHTML = '<strong>College Buddy:</strong> <span id="bot-response"></span>';
-            document.getElementById('chat-container').appendChild(botMessageElement);
-
-            axios.post('/chat', { message: message })
-                .then(response => {
-                    simulateStreaming(response.data.response, 'bot-response');
-                    displayRelatedInfo(response.data.intent_data);
-                    userInput.value = '';
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    document.getElementById('bot-response').textContent = 'Sorry, I encountered an error. Please try again.';
-                });
-        }
-
-        function simulateStreaming(text, elementId) {
-            const element = document.getElementById(elementId);
-            let index = 0;
-
-            function addNextChar() {
-                if (index < text.length) {
-                    element.textContent += text.charAt(index);
-                    index++;
-                    setTimeout(addNextChar, 20);
-                }
+        const userInput = document.getElementById('user-input');
+        const message = userInput.value;
+        if (message.trim() === '') return;
+        addMessageToChat('You', message, 'user-message');
+        // Create a placeholder for the bot's response
+        const botMessageElement = document.createElement('div');
+        botMessageElement.className = 'message bot-message';
+        botMessageElement.innerHTML = '<strong>College Buddy:</strong> <span id="bot-response-' + Date.now() + '"></span>';
+        document.getElementById('chat-container').appendChild(botMessageElement);
+        const responseId = 'bot-response-' + Date.now();
+        axios.post('/chat', { message: message })
+            .then(response => {
+                simulateStreaming(response.data.response, responseId);
+                displayRelatedInfo(response.data.intent_data);
+                userInput.value = '';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById(responseId).textContent = 'Sorry, I encountered an error. Please try again.';
+            });
+    }
+    function simulateStreaming(text, elementId) {
+        const element = document.getElementById(elementId);
+        let index = 0;
+        const chunkSize = 5; // Increase the number of characters added per iteration
+        function addNextChunk() {
+            if (index < text.length) {
+                const chunk = text.substr(index, chunkSize);
+                element.textContent += chunk;
+                index += chunkSize;
+                setTimeout(addNextChunk, 10); // Reduce the delay between chunks
             }
-
-            addNextChar();
         }
-
-        function addMessageToChat(sender, message, className) {
-            const chatContainer = document.getElementById('chat-container');
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${className}`;
-            messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
-            chatContainer.appendChild(messageElement);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
+        addNextChunk();
+    }
+    function addMessageToChat(sender, message, className) {
+        const chatContainer = document.getElementById('chat-container');
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${className}`;
+        messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+        chatContainer.appendChild(messageElement);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
 
         function uploadFile() {
             const fileInput = document.getElementById('file-input');
@@ -888,10 +885,7 @@ def query_for_multiple_intents(intent_keywords):
 def generate_multi_intent_answer(query, intent_data):
     context = "\n".join([
         f"Intent: {intent}\n"
-        f"Metadata Results: {data['metadata_results']}\n"
         f"Pinecone Context: {data['pinecone_context']}\n"
-        f"Related Documents: {', '.join(data['related_documents'])}\n"
-        f"Related Links: {', '.join(data['related_links'])}"
         for intent, data in intent_data.items()
     ])
     max_context_tokens = 4000
