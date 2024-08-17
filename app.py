@@ -121,7 +121,7 @@ def upload_file():
         file.save(file_path)
         # Here you can add logic to process the file, e.g., extract text and add to Pinecone
         return jsonify({'success': True, 'filename': filename})
-HTML_TEMPLATE = '''
+HTML_TEMPLATE = r'''
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,7 +140,6 @@ HTML_TEMPLATE = '''
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
             justify-content: center;
             align-items: center;
             background-image: url('{{ background_image }}');
@@ -151,7 +150,7 @@ HTML_TEMPLATE = '''
         .container {
             max-width: 1200px;
             margin: 20px;
-            background-color: rgba(255, 245, 238, 0.9); /* Pastel peach */
+            background-color: rgba(255, 245, 238, 0.9);
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             overflow: hidden;
@@ -163,7 +162,7 @@ HTML_TEMPLATE = '''
             padding: 30px;
         }
         h1, h2, h3 {
-            color: #7b6079; /* Pastel purple */
+            color: #7b6079;
         }
         h1 {
             font-size: 2.5em;
@@ -182,37 +181,45 @@ HTML_TEMPLATE = '''
         #chat-container {
             height: 400px;
             overflow-y: auto;
-            border: 2px solid #b2d8d8; /* Pastel teal */
+            border: 2px solid #b2d8d8;
             padding: 15px;
             margin-bottom: 20px;
             background-color: rgba(255, 255, 255, 0.8);
             border-radius: 15px;
             display: flex;
-            flex-direction: column; /* Change to column for top-to-bottom scrolling */
+            flex-direction: column;
+        }
+        .input-container {
+            display: flex;
+            align-items: center;
+            border: 2px solid #b2d8d8;
+            border-radius: 25px;
+            overflow: hidden;
+            background-color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 20px;
         }
         #user-input {
-            width: calc(100% - 120px);
+            flex-grow: 1;
             padding: 12px;
-            border: 2px solid #b2d8d8; /* Pastel teal */
-            border-radius: 25px;
+            border: none;
             font-size: 16px;
-            background-color: rgba(255, 255, 255, 0.8);
+            background-color: transparent;
         }
-        button {
+        #user-input:focus {
+            outline: none;
+        }
+        .send-button {
             padding: 12px 25px;
-            background-color: #aec6cf; /* Pastel blue */
+            background-color: #aec6cf;
             color: #5d5d5d;
             border: none;
             cursor: pointer;
             transition: all 0.3s ease;
-            border-radius: 25px;
             font-size: 16px;
             font-weight: 500;
         }
-        button:hover {
-            background-color: #f7cac9; /* Pastel pink */
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        .send-button:hover {
+            background-color: #f7cac9;
         }
         .message {
             margin-bottom: 15px;
@@ -226,20 +233,20 @@ HTML_TEMPLATE = '''
             to { opacity: 1; transform: translateY(0); }
         }
         .user-message {
-            background-color: #dcd0ff; /* Pastel lavender */
+            background-color: #dcd0ff;
             color: #5d5d5d;
-            align-self: flex-start; /* Align to the left */
-            margin-right: auto; /* Push to the left */
+            align-self: flex-start;
+            margin-right: auto;
         }
         .bot-message {
-            background-color: #e0f0e3; /* Pastel mint */
+            background-color: #e0f0e3;
             align-self: flex-start;
         }
         .popular-questions {
             margin-top: 30px;
         }
         .popular-question {
-            background-color: rgba(255, 223, 211, 0.5); /* Light pastel orange */
+            background-color: rgba(255, 223, 211, 0.5);
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 15px;
@@ -248,7 +255,7 @@ HTML_TEMPLATE = '''
             color: #5d5d5d;
         }
         .popular-question:hover {
-            background-color: rgba(255, 223, 211, 0.8); /* Darker pastel orange */
+            background-color: rgba(255, 223, 211, 0.8);
             transform: translateY(-3px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -259,8 +266,8 @@ HTML_TEMPLATE = '''
             border-radius: 15px;
         }
         .sidebar {
-            background-color: rgba(255, 245, 238, 0.8); /* Lighter pastel peach */
-            border-left: 1px solid #f7cac9; /* Pastel pink */
+            background-color: rgba(255, 245, 238, 0.8);
+            border-left: 1px solid #f7cac9;
         }
         .file-upload {
             margin-top: 20px;
@@ -271,14 +278,14 @@ HTML_TEMPLATE = '''
         .file-upload label {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #aec6cf; /* Pastel blue */
+            background-color: #aec6cf;
             color: #5d5d5d;
             border-radius: 25px;
             cursor: pointer;
             transition: all 0.3s ease;
         }
         .file-upload label:hover {
-            background-color: #f7cac9; /* Pastel pink */
+            background-color: #f7cac9;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
@@ -292,6 +299,20 @@ HTML_TEMPLATE = '''
         .admin-controls button {
             width: 100%;
             margin-bottom: 10px;
+            padding: 12px 25px;
+            background-color: #aec6cf;
+            color: #5d5d5d;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .admin-controls button:hover {
+            background-color: #f7cac9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
         .hidden {
             display: none;
@@ -302,9 +323,8 @@ HTML_TEMPLATE = '''
             }
             .sidebar {
                 border-left: none;
-                border-top: 1px solid #f7cac9; /* Pastel pink */
+                border-top: 1px solid #f7cac9;
             }
-
         }
         .copyright {
             text-align: center;
@@ -313,6 +333,25 @@ HTML_TEMPLATE = '''
             color: #7b6079;
             font-size: 14px;
             border-top: 1px solid #f7cac9;
+        }
+         .popular-topics {
+            margin-top: 30px;
+        }
+        .topic-button {
+            display: inline-block;
+            background-color: #f0f0f0;
+            color: #333;
+            padding: 8px 15px;
+            margin: 5px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .topic-button:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
@@ -327,16 +366,18 @@ HTML_TEMPLATE = '''
             
             <div id="chat-container"></div>
             
-            <input type="text" id="user-input" placeholder="Ask your question...">
-            <button onclick="sendMessage()">Send</button>
+            <div class="input-container">
+                <input type="text" id="user-input" placeholder="Ask your question...">
+                <button class="send-button" onclick="sendMessage()">Send</button>
+            </div>
             
             <div class="related-info" id="related-info"></div>
         </div>
         
         <div class="sidebar">
-            <div class="popular-questions">
-                <h3>Popular Questions</h3>
-                <div id="popular-questions-container"></div>
+            <div class="popular-topics">
+                <h3>Related Topics</h3>
+                <div id="popular-topics-container"></div>
             </div>
 
             <div class="admin-controls">
@@ -352,33 +393,56 @@ HTML_TEMPLATE = '''
             <div id="upload-status"></div>
         </div>
         <div class="copyright">
-            &copy; 2024 KLM Solutions. All rights reserved.
+            &copy; 2024 KLM Solutions. All rights reserved.<br>
+            Made with ❤️ Erode, India
         </div>
-    </div>
     </div>
 
     <script>
-        // Function to get random items from an array
         function getRandomItems(arr, count) {
             const shuffled = arr.sort(() => 0.5 - Math.random());
             return shuffled.slice(0, count);
         }
+        function extractTopic(question) {
+            // Simple function to extract a topic from a question
+            const topics = {
+                "declare a major": "Major Declaration",
+                "GPA and course requirements": "Academic Requirements",
+                "Red Raider Orientation": "Orientation",
+                "Code of Student Conduct": "Student Conduct",
+                "reporting incidents": "Incident Reporting",
+                "amnesty provisions": "Amnesty Policies",
+                "academic misconduct": "Academic Integrity",
+                "resolving student misconduct": "Misconduct Resolution",
+                "investigative process": "Investigation Procedures",
+                "healthy lifestyle": "Student Wellness"
+            };
 
-        // Populate popular questions with 3 random questions
-        const popularQuestionsContainer = document.getElementById('popular-questions-container');
-        const randomQuestions = getRandomItems({{ example_questions|tojson }}, 3);
+            for (const [key, value] of Object.entries(topics)) {
+                if (question.toLowerCase().includes(key.toLowerCase())) {
+                    return value;
+                }
+            }
+            return "General Information";
+        }
+
+        const popularTopicsContainer = document.getElementById('popular-topics-container');
+        const randomQuestions = getRandomItems({{ example_questions|tojson }}, 5);
         
         randomQuestions.forEach(question => {
-            const div = document.createElement('div');
-            div.className = 'popular-question';
-            div.textContent = question;
-            div.onclick = () => {
+            const topic = extractTopic(question);
+            const button = document.createElement('button');
+            button.className = 'topic-button';
+            button.textContent = topic;
+            button.onclick = () => {
                 document.getElementById('user-input').value = question;
                 sendMessage();
             };
-            popularQuestionsContainer.appendChild(div);
+            popularTopicsContainer.appendChild(button);
         });
 
+
+        
         function displayRelatedInfo(intentData) {
             const relatedInfo = document.getElementById('related-info');
             relatedInfo.innerHTML = '<h3>Related Information:</h3>';
@@ -408,7 +472,6 @@ HTML_TEMPLATE = '''
 
             addMessageToChat('You', message, 'user-message');
             
-            // Create a placeholder for the bot's response
             const botMessageElement = document.createElement('div');
             botMessageElement.className = 'message bot-message';
             botMessageElement.innerHTML = '<strong>College Buddy:</strong> <span id="bot-response"></span>';
@@ -434,7 +497,7 @@ HTML_TEMPLATE = '''
                 if (index < text.length) {
                     element.textContent += text.charAt(index);
                     index++;
-                    setTimeout(addNextChar, 20); // Adjust the delay as needed
+                    setTimeout(addNextChar, 20);
                 }
             }
 
@@ -480,7 +543,7 @@ HTML_TEMPLATE = '''
                 statusElement.textContent = 'An error occurred during upload';
             });
 
-            fileInput.value = ''; // Reset file input
+            fileInput.value = '';
         }
 
         function toggleAdminControls() {
@@ -498,7 +561,7 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-DATABASE_TEMPLATE = '''
+DATABASE_TEMPLATE = r'''
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -703,8 +766,9 @@ DATABASE_TEMPLATE = '''
             </div>
         </div>
         <div class="copyright">
-            &copy; 2024 KLM Solutions. All rights reserved.
-        </div>
+    &copy; 2024 KLM Solutions. All rights reserved.<br>
+    Made with ❤️ Erode, India
+</div>
     </div>
     </div>
 
