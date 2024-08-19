@@ -11,6 +11,7 @@ import random
 from docx import Document
 import base64
 import re
+import markdown
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
@@ -84,9 +85,9 @@ def home():
 @app.route('/chat', methods=['POST'])
 def chat():
     user_query = request.json['message']
-    final_answer, intent_data = get_answer(user_query)
+    markdown_answer, intent_data = get_answer(user_query)
     return jsonify({
-        'response': final_answer,
+        'response': markdown_answer,
         'intent_data': intent_data
     })
 
@@ -131,6 +132,8 @@ HTML_TEMPLATE = r'''
     <title>College Buddy Assistant</title>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
     <style>
         body {
             font-family: 'Poppins', sans-serif;
@@ -354,6 +357,27 @@ HTML_TEMPLATE = r'''
             transform: translateY(-2px);
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
+        .markdown-content {
+            line-height: 1.6;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .markdown-content ul, .markdown-content ol {
+            margin-left: 20px;
+        }
+        .markdown-content pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .markdown-content code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -467,41 +491,52 @@ HTML_TEMPLATE = r'''
         }
 
         function sendMessage() {
-        const userInput = document.getElementById('user-input');
-        const message = userInput.value;
-        if (message.trim() === '') return;
-        addMessageToChat('You', message, 'user-message');
-        // Create a placeholder for the bot's response
-        const botMessageElement = document.createElement('div');
-        botMessageElement.className = 'message bot-message';
-        botMessageElement.innerHTML = '<strong>College Buddy:</strong> <span id="bot-response-' + Date.now() + '"></span>';
-        document.getElementById('chat-container').appendChild(botMessageElement);
-        const responseId = 'bot-response-' + Date.now();
-        axios.post('/chat', { message: message })
-            .then(response => {
-                simulateStreaming(response.data.response, responseId);
+    const userInput = document.getElementById('user-input');
+    const message = userInput.value;
+    if (message.trim() === '') return;
+    addMessageToChat('You', message, 'user-message');
+    // Create a placeholder for the bot's response
+    const botMessageElement = document.createElement('div');
+    botMessageElement.className = 'message bot-message';
+    botMessageElement.innerHTML = '<strong>College Buddy:</strong> <div id="bot-response-' + Date.now() + '"></div>';
+    document.getElementById('chat-container').appendChild(botMessageElement);
+    const responseId = 'bot-response-' + Date.now();
+    axios.post('/chat', { message: message })
+        .then(response => {
+            const markdownContent = response.data.response;
+            simulateStreaming(markdownContent, responseId, () => {
+                // After streaming is complete, render the markdown
+                const renderedMarkdown = marked.parse(markdownContent);
+                document.getElementById(responseId).innerHTML = `<div class="markdown-content">${renderedMarkdown}</div>`;
                 displayRelatedInfo(response.data.intent_data);
-                userInput.value = '';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById(responseId).textContent = 'Sorry, I encountered an error. Please try again.';
             });
-    }
-    function simulateStreaming(text, elementId) {
-        const element = document.getElementById(elementId);
-        let index = 0;
-        const chunkSize = 5; // Increase the number of characters added per iteration
-        function addNextChunk() {
-            if (index < text.length) {
-                const chunk = text.substr(index, chunkSize);
-                element.textContent += chunk;
-                index += chunkSize;
-                setTimeout(addNextChunk, 10); // Reduce the delay between chunks
-            }
+            userInput.value = '';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById(responseId).textContent = 'Sorry, I encountered an error. Please try again.';
+        });
+}
+
+function simulateStreaming(text, elementId, callback) {
+    const element = document.getElementById(elementId);
+    let index = 0;
+    const chunkSize = 5; // Increase the number of characters added per iteration
+
+    function addNextChunk() {
+        if (index < text.length) {
+            const chunk = text.substr(index, chunkSize);
+            element.textContent += chunk;
+            index += chunkSize;
+            element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            setTimeout(addNextChunk, 10); // Reduce the delay between chunks
+        } else {
+            if (callback) callback();
         }
-        addNextChunk();
     }
+
+    addNextChunk();
+}
     function addMessageToChat(sender, message, className) {
         const chatContainer = document.getElementById('chat-container');
         const messageElement = document.createElement('div');
@@ -912,6 +947,45 @@ def generate_multi_intent_answer(query, intent_data):
     )
    
     return response.choices[0].message.content.strip()
+def structure_gpt_response(raw_response):
+    structured_response = {
+        'introduction': '',
+        'points': []
+    }
+    
+    lines = raw_response.split('\n')
+    
+    # Extract introduction (first non-empty line)
+    for line in lines:
+        if line.strip():
+            structured_response['introduction'] = line.strip()
+            break
+    
+    # Extract numbered points
+    current_point = None
+    for line in lines[1:]:  # Skip the first line (introduction)
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check for numbered points
+        match = re.match(r'(\d+)\.\s*(.*?):', line)
+        if match:
+            if current_point:
+                structured_response['points'].append(current_point)
+            current_point = {
+                'number': match.group(1),
+                'title': match.group(2),
+                'details': []
+            }
+        elif current_point:
+            current_point['details'].append(line)
+    
+    # Add the last point if exists
+    if current_point:
+        structured_response['points'].append(current_point)
+    
+    return structured_response
 
 def get_answer(query):
     try:
@@ -919,6 +993,9 @@ def get_answer(query):
         intent_keywords = generate_keywords_per_intent(intents)
         intent_data = query_for_multiple_intents(intent_keywords)
         final_answer = generate_multi_intent_answer(query, intent_data)
+        
+        # Convert the final answer to markdown
+        markdown_answer = markdown.markdown(final_answer)
         
         # Ensure intent_data is JSON serializable
         serializable_intent_data = {}
@@ -939,10 +1016,10 @@ def get_answer(query):
                 'related_links': data['related_links']
             }
         
-        return final_answer, serializable_intent_data
+        return markdown_answer, serializable_intent_data
     except Exception as e:
         print(f"Error in get_answer: {str(e)}")
-        return "I'm sorry, I encountered an error while processing your query.", {}
+        return "<p>I'm sorry, I encountered an error while processing your query.</p>", {}
 
 def get_all_metadata():
     results = index_metadata.query(vector=[0]*1536, top_k=10000, include_metadata=True)
