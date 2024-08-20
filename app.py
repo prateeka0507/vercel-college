@@ -85,12 +85,15 @@ def home():
 @app.route('/chat', methods=['POST'])
 def chat():
     user_query = request.json['message']
-    markdown_answer, intent_data = get_answer(user_query)
+    final_answer, intent_data = get_answer(user_query)
+    
+    # Convert the final answer to markdown
+    markdown_answer = markdown.markdown(final_answer)
+    
     return jsonify({
         'response': markdown_answer,
         'intent_data': intent_data
     })
-
 @app.route('/database')
 def database():
     metadata = get_all_metadata()
@@ -133,7 +136,6 @@ HTML_TEMPLATE = r'''
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
     <style>
         body {
             font-family: 'Poppins', sans-serif;
@@ -378,6 +380,28 @@ HTML_TEMPLATE = r'''
             padding: 2px 4px;
             border-radius: 3px;
         }
+        .markdown-content ol { counter-reset: item; }
+        .markdown-content li { display: block; }
+        .markdown-content li:before {
+            content: counters(item, ".") ". ";
+            counter-increment: item;
+        }
+        .markdown-content .list-level-1 { padding-left: 20px; }
+    .markdown-content .list-level-2 { padding-left: 40px; }
+    .markdown-content .list-level-3 { padding-left: 60px; }
+    .markdown-content .list-level-4 { padding-left: 80px; }
+    .markdown-content .list-level-5 { padding-left: 100px; }
+
+    .markdown-content .custom-heading { margin-top: 1em; margin-bottom: 0.5em; }
+    .markdown-content .custom-paragraph { margin-bottom: 1em; }
+    .markdown-content .custom-emphasis { font-weight: bold; }
+
+    .markdown-content ol { list-style-type: decimal; }
+    .markdown-content ul { list-style-type: disc; }
+    .markdown-content ol ol { list-style-type: lower-alpha; }
+    .markdown-content ol ol ol { list-style-type: lower-roman; }
+    .markdown-content ul ul { list-style-type: circle; }
+    .markdown-content ul ul ul { list-style-type: square; }
     </style>
 </head>
 <body>
@@ -495,19 +519,17 @@ HTML_TEMPLATE = r'''
     const message = userInput.value;
     if (message.trim() === '') return;
     addMessageToChat('You', message, 'user-message');
-    // Create a placeholder for the bot's response
+    
     const botMessageElement = document.createElement('div');
     botMessageElement.className = 'message bot-message';
     botMessageElement.innerHTML = '<strong>College Buddy:</strong> <div id="bot-response-' + Date.now() + '"></div>';
     document.getElementById('chat-container').appendChild(botMessageElement);
     const responseId = 'bot-response-' + Date.now();
+    
     axios.post('/chat', { message: message })
         .then(response => {
             const markdownContent = response.data.response;
-            simulateStreaming(markdownContent, responseId, () => {
-                // After streaming is complete, render the markdown
-                const renderedMarkdown = marked.parse(markdownContent);
-                document.getElementById(responseId).innerHTML = `<div class="markdown-content">${renderedMarkdown}</div>`;
+            streamMarkdownResponse(markdownContent, responseId, () => {
                 displayRelatedInfo(response.data.intent_data);
             });
             userInput.value = '';
@@ -517,19 +539,27 @@ HTML_TEMPLATE = r'''
             document.getElementById(responseId).textContent = 'Sorry, I encountered an error. Please try again.';
         });
 }
-
-function simulateStreaming(text, elementId, callback) {
+function streamMarkdownResponse(markdown, elementId, callback) {
     const element = document.getElementById(elementId);
     let index = 0;
-    const chunkSize = 5; // Increase the number of characters added per iteration
+    let currentMarkdown = '';
+    const chunkSize = 5; // Adjust as needed
 
     function addNextChunk() {
-        if (index < text.length) {
-            const chunk = text.substr(index, chunkSize);
-            element.textContent += chunk;
+        if (index < markdown.length) {
+            const chunk = markdown.substr(index, chunkSize);
+            currentMarkdown += chunk;
+            const renderedHTML = marked.parse(currentMarkdown, {
+                gfm: true,
+                breaks: true,
+                headerIds: false,
+                mangle: false
+            });
+            const formattedContent = enhanceFormatting(renderedHTML);
+            element.innerHTML = `<div class="markdown-content">${formattedContent}</div>`;
             index += chunkSize;
             element.scrollIntoView({ behavior: 'smooth', block: 'end' });
-            setTimeout(addNextChunk, 10); // Reduce the delay between chunks
+            setTimeout(addNextChunk, 10); // Adjust delay as needed
         } else {
             if (callback) callback();
         }
@@ -545,7 +575,48 @@ function simulateStreaming(text, elementId, callback) {
         chatContainer.appendChild(messageElement);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
+function enhanceFormatting(content) {
+    // Add custom classes for better styling
+    content = content.replace(/<h1>/g, '<h1 class="custom-heading">');
+    content = content.replace(/<h2>/g, '<h2 class="custom-heading">');
+    content = content.replace(/<h3>/g, '<h3 class="custom-heading">');
+    content = content.replace(/<p>/g, '<p class="custom-paragraph">');
+    content = content.replace(/<strong>/g, '<strong class="custom-emphasis">');
+    
+    // Enhance list formatting
+    content = content.replace(/<ul>/g, '<ul class="custom-list">');
+    content = content.replace(/<ol>/g, '<ol class="custom-list">');
+    content = content.replace(/<li>/g, '<li class="custom-list-item">');
+    
+    // Add custom classes for code blocks
+    content = content.replace(/<pre><code>/g, '<pre class="custom-code-block"><code>');
+    content = content.replace(/<code>/g, '<code class="custom-inline-code">');
+    
+    // Enhance table formatting
+    content = content.replace(/<table>/g, '<table class="custom-table">');
+    content = content.replace(/<th>/g, '<th class="custom-table-header">');
+    content = content.replace(/<td>/g, '<td class="custom-table-cell">');
+    
+    return content;
+}
 
+
+const newStyles = `
+    .custom-heading { margin-top: 1em; margin-bottom: 0.5em; color: #4a4a4a; }
+    .custom-paragraph { margin-bottom: 1em; line-height: 1.6; }
+    .custom-emphasis { font-weight: bold; color: #0066cc; }
+    .custom-list { margin-left: 1.5em; margin-bottom: 1em; }
+    .custom-list-item { margin-bottom: 0.5em; }
+    .custom-code-block { background-color: #f4f4f4; padding: 1em; border-radius: 5px; overflow-x: auto; }
+    .custom-inline-code { background-color: #f4f4f4; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+    .custom-table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+    .custom-table-header { background-color: #f4f4f4; font-weight: bold; text-align: left; padding: 0.5em; }
+    .custom-table-cell { border: 1px solid #ddd; padding: 0.5em; }
+`;
+
+// Append the new styles to the existing style tag
+document.querySelector('style').textContent += newStyles;
+        
         function uploadFile() {
             const fileInput = document.getElementById('file-input');
             const file = fileInput.files[0];
