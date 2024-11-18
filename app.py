@@ -2,7 +2,7 @@ import os
 from flask import Flask, render_template_string, request, jsonify, session
 from werkzeug.utils import secure_filename
 from openai import OpenAI
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone, ServerlessSpec 
 import tiktoken
 from tiktoken import get_encoding
 import uuid
