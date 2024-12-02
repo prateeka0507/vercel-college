@@ -947,7 +947,7 @@ def query_pinecone(query, index, top_k=5):
 def identify_intents(query):
     intent_prompt = f"Identify the main intent or question within this query. Provide only one primary intent: {query}"
     intent_response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are an intent identification assistant. Identify and provide only the primary intent or question within the given query."},
             {"role": "user", "content": intent_prompt}
@@ -961,7 +961,7 @@ def generate_keywords_per_intent(intents):
     for intent in intents:
         keyword_prompt = f"Generate 5-10 relevant keywords or phrases for this intent, separated by commas: {intent}"
         keyword_response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a keyword extraction assistant. Generate relevant keywords or phrases for the given intent."},
                 {"role": "user", "content": keyword_prompt}
@@ -1000,7 +1000,7 @@ def generate_multi_intent_answer(query, intent_data):
     truncated_context = tokenizer.decode(tokenizer.encode(context)[:max_context_tokens])
     
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": """You are College Buddy, an AI assistant designed to help students with their academic queries. Your primary function is to analyze and provide insights based on the context of uploaded documents. Please adhere to the following guidelines:
 1. Focus on addressing all the intents of the query and give related documents for all the intents.
